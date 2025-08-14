@@ -1,10 +1,11 @@
-import { createRouter, createWebHashHistory  } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import Home from '@/pages/Home.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('@/pages/Home.vue'),
+    component: Home,
     meta: { requiresAuth: false, title: '首页' }
   },
   {

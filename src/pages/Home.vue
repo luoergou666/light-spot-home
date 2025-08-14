@@ -1,12 +1,16 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { Row, Col, Card } from 'view-ui-plus'
+import { Row, Col } from 'view-ui-plus'
 import CircularGallery from '../components/CircularGallery.vue'
 import StarMapCanvas from '../components/StarMapCanvas.vue'
-import MusicPlayer from '../components/MusicPlayer.vue'
 import WelcomeSection from '../components/WelcomeSection.vue'
-import { useRouter } from 'vue-router'
-import ShipTreeCanvas from '@/components/ShipTreeCanvas.vue'
+import LoadingPage from '@/components/home/LoadingPage.vue'
+import CorpIntroduction from '@/components/home/CorpIntroduction.vue'
+import NewbieGuide from '@/components/home/NewbieGuide.vue'
+import Canteen from '@/components/home/Canteen.vue'
+
+// 页面引用
+const loadingPageRef = ref(null)
 
 // 军团数据
 const corpInfo = ref({
@@ -40,98 +44,6 @@ const errorMessage = ref('') // 错误信息
 
 // 页面加载状态管理
 const pageLoading = ref(true) // 页面整体加载状态
-const loadingProgress = ref(1) // 加载进度 1-100，从1开始
-const targetProgress = ref(1) // 目标进度
-const loadingText = ref('正在加载资源...') // 加载提示文字
-const resourcesLoaded = ref({
-  audio: false,
-  corpData: false
-}) // 各类资源加载状态
-const progressInterval = ref(null) // 进度条动画定时器
-
-// 开始初始进度增长
-const startInitialProgress = () => {
-  // 在没有资源加载完成时，让进度条缓慢增长到30%
-  const initialTarget = 30
-  let currentProgress = 1
-
-  const initialInterval = setInterval(() => {
-    if (currentProgress < initialTarget) {
-      currentProgress += 0.5
-      loadingProgress.value = currentProgress
-    } else {
-      clearInterval(initialInterval)
-    }
-  }, 100)
-}
-
-// 平滑更新进度条
-const smoothUpdateProgress = (target) => {
-  targetProgress.value = target
-
-  if (progressInterval.value) {
-    clearInterval(progressInterval.value)
-  }
-
-  progressInterval.value = setInterval(() => {
-    const current = loadingProgress.value
-    const diff = targetProgress.value - current
-
-    if (Math.abs(diff) < 0.5) {
-      loadingProgress.value = targetProgress.value
-      clearInterval(progressInterval.value)
-      progressInterval.value = null
-    } else {
-      // 缓慢增长，速度随着接近目标而减慢
-      loadingProgress.value += diff * 0.05
-    }
-  }, 50)
-}
-
-// 检查所有资源是否加载完成
-const checkAllResourcesLoaded = () => {
-  const loaded = Object.values(resourcesLoaded.value)
-  const loadedCount = loaded.filter(Boolean).length
-  const totalCount = loaded.length
-
-  // 根据加载状态计算目标进度
-  let target = 30 // 基础进度30%
-
-  if (loadedCount === 1) {
-    target = 65 // 第一个资源加载完成
-  } else if (loadedCount === totalCount) {
-    target = 100 // 所有资源加载完成
-  }
-
-  // 确保进度条只能向前，不能倒退
-  if (target > loadingProgress.value) {
-    smoothUpdateProgress(target)
-  }
-
-  // 更新加载文字
-  if (resourcesLoaded.value.audio && !resourcesLoaded.value.corpData) {
-    loadingText.value = '正在获取军团数据...'
-  } else if (loadedCount === totalCount) {
-    // 等待进度条到达100%后再显示"加载完成"并隐藏加载页面
-    const waitForProgress = () => {
-      if (loadingProgress.value >= 99.5) {
-        loadingText.value = '加载完成！'
-        setTimeout(() => {
-          pageLoading.value = false
-        }, 200) // 显示"加载完成"后立即切换，只保留200ms的短暂延迟
-      } else {
-        setTimeout(waitForProgress, 100) // 每100ms检查一次进度
-      }
-    }
-    waitForProgress()
-  }
-}
-
-// 标记资源加载完成
-const markResourceLoaded = (resourceType) => {
-  resourcesLoaded.value[resourceType] = true
-  checkAllResourcesLoaded()
-}
 
 // 监听军团成员数据变化
 watch(corpMembers, (newMembers) => {
@@ -237,7 +149,6 @@ const fetchCorporationMembers = async (corpId) => {
   const cachedMembers = loadMembersFromStorage()
   if (cachedMembers) {
     corpMembers.value = cachedMembers
-    markResourceLoaded('corpData')
     return
   }
 
@@ -277,10 +188,8 @@ const fetchCorporationMembers = async (corpId) => {
         continue
       }
 
-      // 获取角色头衔
-
       const memberData = {
-        image: `/eve-images/characters/${character.character_id}/portrait?size=256`,
+        image: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://images.evetech.net/characters/${character.character_id}/portrait?size=256`)}`,
         text: characterName,
         characterId: character.character_id,
         fallbackImage: 'https://picsum.photos/256/256?grayscale' // 备用图片
@@ -311,49 +220,15 @@ const fetchCorporationMembers = async (corpId) => {
 
     ]
     corpMembers.value = defaultMembers
-    // 移除图片加载标记
   } finally {
     isLoading.value = false
-    markResourceLoaded('corpData')
   }
 }
 
 
 
 
-const newbieInfo = ref([
-  {
-    name: '新人入团指引',
-    fileType: 'markdown',
-    filePath: '/docs/newbie-guide.md'
-  },
-  {
-    name: '新人进阶教学',
-    fileType: 'markdown',
-    filePath: '/docs/advanced-tutorial.md'
-  },
-  {
-    name: '新人刷怪报点教程',
-    fileType: 'markdown',
-    filePath: '/docs/ratting-guide.md'
-  },
-  {
-    name: '角色技能机制',
-    fileType: 'markdown',
-    filePath: '/docs/skill-mechanics.md'
-  },
-  {
-    name: '光点舰船树形图',
-    fileType: 'image',
-    filePath: '@/assets/光点舰船树形图.jpg'
-  }
-])
-
-// 弹框状态
-const showModal = ref(false)
-const modalContent = ref('')
-const modalType = ref('')
-const modalTitle = ref('')
+// 移除新人指引相关状态，已迁移到 NewbieGuide.vue
 
 const historyInfo = ref({
   title: '光点编年史：',
@@ -389,67 +264,33 @@ watch(responsiveFont, (newFont) => {
   }, 500) // 500ms防抖，比CircularGallery内部的300ms更长
 })
 
-const canteenInfo = ref({
-  title: '光点大饭堂：',
-  subtitle: '（投稿找鲨鱼）',
-  posts: [
-    { title: '你敢不敢？我敢回家的诱惑', author: '我是死亡-1' },
-    { title: '我找我自己-2', author: '你敢到我的TSK了吗' },
-    { title: '性感飞龙，半夜偷渡速来小队', author: '你的改装舰船' },
-    { title: '逆组鬼才', author: '世界第一强势新人' }
-  ]
-})
-
-
-
-// 处理新人指引点击事件
-const handleNewbieItemClick = async (item) => {
-  modalTitle.value = item.name
-  modalType.value = item.fileType
-  try {
-    if (item.fileType === 'markdown') {
-      // 读取markdown文件内容
-      const response = await fetch(item.filePath)
-      if (response.ok) {
-        modalContent.value = await response.text()
-      } else {
-        modalContent.value = '文件加载失败，请稍后重试。'
-      }
-    } else if (item.fileType === 'image') {
-      // 对于图片，直接使用文件路径
-      modalContent.value = item.filePath
-    }
-
-    showModal.value = true
-  } catch (error) {
-    console.error('加载文件失败:', error)
-    modalContent.value = '文件加载失败，请稍后重试。'
-    showModal.value = true
-  }
-}
-
-// 关闭弹框
-const closeModal = () => {
-  showModal.value = false
-  modalContent.value = ''
-  modalType.value = ''
-  modalTitle.value = ''
-}
-
 // 窗口大小变化处理
 const handleResize = () => {
   windowWidth.value = window.innerWidth
 }
 
 onMounted(async () => {
-  // 开始缓慢增长进度条
-  startInitialProgress()
-
-  // 立即标记音频为已加载（简化处理）
-  markResourceLoaded('audio')
+  // 模拟音频资源加载
+  setTimeout(() => {
+    if (loadingPageRef.value) {
+      loadingPageRef.value.markResourceLoaded('audio')
+    }
+  }, 1000) // 1秒后标记音频加载完成
 
   // 获取军团成员信息
-  fetchCorporationMembers('98772842')
+  try {
+    await fetchCorporationMembers('98772842')
+    // 军团数据加载完成后标记
+    if (loadingPageRef.value) {
+      loadingPageRef.value.markResourceLoaded('corpData')
+    }
+  } catch (error) {
+    console.error('获取军团数据失败:', error)
+    // 即使失败也标记为完成，避免卡住
+    if (loadingPageRef.value) {
+      loadingPageRef.value.markResourceLoaded('corpData')
+    }
+  }
 
   // 初始化稳定字体
   stableFont.value = responsiveFont.value
@@ -461,10 +302,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (progressInterval.value) {
-    clearInterval(progressInterval.value)
-  }
-
   // 清理字体更新定时器
   if (fontUpdateTimeout) {
     clearTimeout(fontUpdateTimeout)
@@ -474,32 +311,18 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleResize)
   }
-})
-</script>
+})</script>
 
 <template>
   <div class="corp-home">
     <!-- 加载页面 -->
     <Transition name="loading-fade" appear>
-      <div v-if="pageLoading" class="loading-overlay">
-        <div class="loading-content">
-          <!-- 标题栏 -->
-          <div class="loading-header">
-            <img src="@/assets/光点.png" alt="光点军团Logo" class="loading-logo" />
-            <h1 class="loading-title">{{ corpInfo.welcome }}</h1>
-            <p class="loading-motto">{{ corpInfo.motto }}</p>
-          </div>
-
-          <!-- 进度条 -->
-          <div class="loading-progress">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: loadingProgress + '%' }"></div>
-            </div>
-            <div class="progress-text">{{ loadingText }}</div>
-            <div class="progress-percentage">{{ loadingProgress.toFixed(2) }}%</div>
-          </div>
-      </div>
-      </div>
+      <LoadingPage
+        ref="loadingPageRef"
+        v-if="pageLoading"
+        :corp-info="corpInfo"
+        @loaded="pageLoading = false"
+      />
     </Transition>
 
     <!-- 主要页面内容 - 只有在加载完成后才显示 -->
@@ -512,62 +335,12 @@ onUnmounted(() => {
         <div class="content-rows">
         <Row :gutter="24" class="main-row">
           <!-- 左侧列 -->
-          <Col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
-          <!-- 军团简介 -->
-          <Card class="info-card tech-card" title="军团简介">
-            <div class="corp-stats">
-              <div class="stat-item">
-                <span class="stat-label">成员</span>
-                <span class="stat-value">{{ corpInfo.members.total }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">活跃成员</span>
-                <span class="stat-value">{{ corpInfo.members.active }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">在线人数</span>
-                <span class="stat-value">{{ corpInfo.members.online }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">超旗驾驶</span>
-                <span class="stat-value">{{ corpInfo.members.超旗 }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">旗舰驾驶</span>
-                <span class="stat-value">{{ corpInfo.members.旗舰 }}</span>
-              </div>
-            </div>
-            <Divider />
-            <div class="leadership-info">
-              <p><strong>军团CEO：</strong>{{ corpInfo.leadership.ceo }}</p>
-              <p><strong>军团FC：</strong>{{ corpInfo.leadership.fc }}</p>
-              <p><strong>新人教官：</strong>{{ corpInfo.leadership.newbie }}</p>
-            </div>
-            <Divider />
-            <div class="manufacturer-info">
-              <p><strong>物品制造商：</strong>{{ corpInfo.manufacturers.items }}</p>
-              <p><strong>旗舰制造商：</strong>{{ corpInfo.manufacturers.ships }}</p>
-              <p><strong>死亡势力收购商：</strong>{{ corpInfo.manufacturers.deathClone }}</p>
-              <p><strong>垃圾收购商：</strong>{{ corpInfo.manufacturers.garbage }}</p>
-            </div>
-          </Card>
-          <!-- 新人指引 -->
-          <Card class="info-card tech-card" title="新人指引" style="margin-top: 16px;">
-            <List>
-              <ListItem
-                v-for="item in newbieInfo"
-                :key="item.name"
-                class="tech-list-item"
-                @click="handleNewbieItemClick(item)"
-              >
-                <ListItemMeta :title="item.name" />
-                <template #action>
-                  <Icon type="ios-arrow-forward" class="tech-arrow" />
-                </template>
-              </ListItem>
-            </List>
-          </Card>
-          </Col>
+            <Col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
+              <!-- 军团简介 -->
+              <CorpIntroduction :corp-info="corpInfo" />
+              <!-- 新人指引 -->
+              <NewbieGuide />
+            </Col>
 
           <!-- 中间列 -->
           <Col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
@@ -577,18 +350,20 @@ onUnmounted(() => {
           <!-- 右侧列 -->
           <Col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
           <!-- 光点编年史 -->
-          <Card class="info-card tech-card" title="光点编年史">
+          <Card class="info-card tech-card">
+            <template #title>
+              <div class="card-title-container">
+                <h3 class="card-title-text">{{ historyInfo.title + historyInfo.subtitle }}</h3>
+              </div>
+            </template>
             <div class="history-section">
-              <h3>{{ historyInfo.title }}</h3>
-              <p>{{ historyInfo.subtitle }}</p>
               <a :href="historyInfo.link" target="_blank" class="history-link">
                 查看编年史文档
               </a>
             </div>
           </Card>
-          <Card class="info-card tech-card" title="光点饭堂" style="margin-top: 16px;">
-
-          </Card>
+          <!-- 光点饭堂 -->
+          <Canteen />
           </Col>
         </Row>
         <Row class="gallery-row">
@@ -602,24 +377,7 @@ onUnmounted(() => {
       </div> <!-- 主要页面内容结束 -->
     </Transition>
 
-    <!-- 文件内容弹框 -->
-    <Modal
-      v-model="showModal"
-      :title="modalTitle"
-      :width="modalType === 'image' ? 800 : 600"
-      :mask-closable="true"
-      @on-cancel="closeModal"
-    >
-      <div v-if="modalType === 'markdown'" class="modal-content">
-        <pre class="markdown-content">{{ modalContent }}</pre>
-      </div>
-      <div v-else-if="modalType === 'image'" class="modal-content image-content">
-        <img :src="modalContent" :alt="modalTitle" class="modal-image" />
-      </div>
-      <div slot="footer">
-        <Button @click="closeModal">关闭</Button>
-      </div>
-    </Modal>
+    <!-- 弹框逻辑已迁移到各个子组件中 -->
   </div>
 </template>
 
@@ -632,8 +390,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-
-
 
 .main-content {
   width: 100%;
@@ -688,112 +444,9 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-.info-card {
-  background: transparent !important;
-  border: 1px solid rgba(255, 215, 0, 0.2) !important;
-  border-radius: 12px !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-}
 
-/* 科技感卡片样式 */
-.tech-card {
-  background: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 215, 0, 0.3) !important;
-  border-radius: 0 !important;
-  position: relative !important;
-  overflow: hidden !important;
-}
 
-/* 科技感内角 */
-.tech-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 20px;
-  height: 20px;
-  border-top: 2px solid #00ffff;
-  border-left: 2px solid #00ffff;
-  z-index: 1;
-}
-
-.tech-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 20px;
-  height: 20px;
-  border-top: 2px solid #00ffff;
-  border-right: 2px solid #00ffff;
-  z-index: 1;
-}
-
-.tech-card .ivu-card-body::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 20px;
-  height: 20px;
-  border-bottom: 2px solid #00ffff;
-  border-left: 2px solid #00ffff;
-  z-index: 1;
-}
-
-.tech-card .ivu-card-body::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 20px;
-  height: 20px;
-  border-bottom: 2px solid #00ffff;
-  border-right: 2px solid #00ffff;
-  z-index: 1;
-}
-
-.info-card :deep(.ivu-card-head) {
-  background: linear-gradient(90deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1)) !important;
-  border-bottom: 1px solid rgba(255, 215, 0, 0.3) !important;
-  color: #ffffff !important;
-  font-weight: bold !important;
-  font-size: 1.1rem !important;
-}
-
-.tech-card :deep(.ivu-card-head) {
-  background: linear-gradient(90deg, rgba(0, 255, 255, 0.1), rgba(0, 200, 255, 0.1)) !important;
-  border-bottom: 1px solid rgba(0, 255, 255, 0.3) !important;
-  color: #00ffff !important;
-  font-weight: bold !important;
-  font-size: 1.1rem !important;
-  position: relative;
-  z-index: 2;
-}
-
-.tech-card :deep(.ivu-card-body) {
-  position: relative;
-  z-index: 2;
-}
-
-.info-card :deep(.ivu-card-head-title) {
-  color: #ffffff !important;
-}
-
-.info-card :deep(.ivu-card-head) {
-  color: #ffffff !important;
-}
-
-.info-card :deep(.ivu-card-head *) {
-  color: #ffffff !important;
-}
-
-.info-card :deep(.ivu-card-body) {
-  color: #ffffff !important;
-  background: transparent !important;
-}
+/* 页面特有样式 - 公共卡片样式已移至 main.css */
 
 .corp-stats {
   display: flex;
@@ -860,7 +513,8 @@ onUnmounted(() => {
 }
 
 .history-link {
-  display: inline-block;
+  display: block;
+  width: 100%;
   margin-top: 12px;
   padding: 8px 16px;
   background: linear-gradient(45deg, #ffd700, #ffb347);
@@ -869,6 +523,8 @@ onUnmounted(() => {
   border-radius: 6px;
   font-weight: bold;
   transition: all 0.3s ease;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .history-link:hover {
@@ -913,115 +569,7 @@ onUnmounted(() => {
 
 
 
-/* 加载页面样式 */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.loading-content {
-  text-align: center;
-  max-width: 600px;
-  padding: 40px;
-}
-
-.loading-header {
-  margin-bottom: 60px;
-}
-
-.loading-logo {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  border: 3px solid #ffd700;
-  box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
-  animation: loadingGlow 2s ease-in-out infinite alternate;
-  margin-bottom: 20px;
-}
-
-.loading-title {
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #e6f3ff;
-  margin-bottom: 10px;
-  text-shadow: 0 0 20px rgba(230, 243, 255, 0.5);
-}
-
-.loading-motto {
-  font-size: 1.2rem;
-  color: #b3d9ff;
-  margin: 0;
-  white-space: nowrap;
-  overflow: visible;
-}
-
-.loading-progress {
-  width: 100%;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 15px;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #ffd700, #ffed4e, #ffd700);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-  animation: progressShine 2s ease-in-out infinite;
-}
-
-.progress-text {
-  font-size: 1rem;
-  color: #e6f3ff;
-  margin-bottom: 5px;
-}
-
-.progress-percentage {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #ffd700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-}
-
-@keyframes loadingGlow {
-  from {
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
-    transform: scale(1);
-  }
-
-  to {
-    box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
-    transform: scale(1.05);
-  }
-}
-
-@keyframes progressShine {
-
-  0%,
-  100% {
-    background-position: -100% 0;
-  }
-
-  50% {
-    background-position: 100% 0;
-  }
-}
+/* 加载页面样式已迁移到 LoadingPage.vue */
 
 /* 过渡动画 */
 .loading-fade-enter-active,
@@ -1041,7 +589,6 @@ onUnmounted(() => {
 
 .content-fade-enter-active {
   transition: all 1s ease 0.3s;
-  /* 延迟0.3s开始 */
 }
 
 .content-fade-enter-from {
@@ -1094,99 +641,8 @@ onUnmounted(() => {
     gap: 0.5rem;
   }
 
-  .gallery-row .info-card {
-    margin-top: 0.5rem !important;
-  }
-
   .main-row .ivu-col {
     margin-bottom: 0.5rem;
   }
-
-  .corp-stats {
-    gap: 0.5rem;
-  }
-
-  .stat-item {
-    padding: 0.5rem;
-  }
-
-  .leadership-info p,
-  .manufacturer-info p {
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-  }
-}
-
-/* 弹框样式 */
-.modal-content {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.markdown-content {
-  white-space: pre-wrap;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #333;
-  background: #f8f9fa;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
-
-.image-content {
-  text-align: center;
-  padding: 16px;
-}
-
-.modal-image {
-  max-width: 100%;
-  max-height: 500px;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* 科技感列表样式 */
-.tech-list-item {
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-bottom: 1px solid rgba(0, 255, 255, 0.1) !important;
-  background: transparent !important;
-}
-
-.tech-list-item:hover {
-  background: rgba(0, 255, 255, 0.1) !important;
-  transform: translateX(8px);
-  border-left: 3px solid #00ffff;
-}
-
-.tech-list-item :deep(.ivu-list-item-meta-title) {
-  color: #ffffff !important;
-  font-size: 14px;
-}
-
-.tech-arrow {
-  color: #00ffff !important;
-  transition: transform 0.3s ease;
-}
-
-.tech-list-item:hover .tech-arrow {
-  transform: translateX(4px);
-}
-
-/* 移除默认列表样式 */
-.tech-card :deep(.ivu-list) {
-  background: transparent !important;
-}
-
-.tech-card :deep(.ivu-list-item) {
-  padding: 12px 16px !important;
-  border-bottom: 1px solid rgba(0, 255, 255, 0.1) !important;
-}
-
-.tech-card :deep(.ivu-list-item:last-child) {
-  border-bottom: none !important;
 }
 </style>

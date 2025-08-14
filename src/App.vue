@@ -7,9 +7,9 @@
     </div>
 
     <!-- 背景层2：SplashCursor组件 -->
-    <!-- <div class="background-layer-2">
+    <div class="background-layer-2">
       <SplashCursor/>
-    </div> -->
+    </div>
 
     <!-- 最顶层：业务路由组件 -->
     <div class="content">

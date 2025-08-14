@@ -6,13 +6,9 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
-   base: process.env.NODE_ENV === 'production'
-    ? '/light-spot-home/'   // 项目站点
-    : '/'                // 个人站点
-    ,
+   base: '/light-spot-home/',
   plugins: [
     vue(),
-    vueDevTools(),
   ],
   resolve: {
     alias: {
