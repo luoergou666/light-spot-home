@@ -38,8 +38,8 @@ export default {
       baseStars: [
         {
           name: 'NJ4X-S',
-          x: 300,
-          y: 150,
+          x: 200,
+          y: 100,
           info: ['集会 2', '避难 6', '废弃老巢 3', '-0.7'],
           securityLevel: -0.7,
           fontSize: {
@@ -49,8 +49,8 @@ export default {
         },
         {
           name: 'W-XBGF',
-          x: 100,
-          y: 150,
+          x: 130,
+          y: 250,
           info: [],
           securityLevel: null,
           fontSize: {

@@ -131,7 +131,7 @@ const calculateCosineSimilarity = (str1, str2) => {
 }
 
 // 检查角色名称是否与已存在的角色相似
-const isNameSimilar = (newName, existingMembers, threshold = 0.8) => {
+const isNameSimilar = (newName, existingMembers, threshold = 0.95) => {
   return existingMembers.some(member => {
     const similarity = calculateCosineSimilarity(newName, member.text)
     return similarity >= threshold
@@ -311,7 +311,8 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleResize)
   }
-})</script>
+})
+</script>
 
 <template>
   <div class="corp-home">

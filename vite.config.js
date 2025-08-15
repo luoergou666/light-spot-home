@@ -6,7 +6,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
-   base: '/light-spot-home/',
+  base: '/light-spot-home/',
   plugins: [
     vue(),
   ],
