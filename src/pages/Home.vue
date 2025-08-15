@@ -8,9 +8,15 @@ import LoadingPage from '@/components/home/LoadingPage.vue'
 import CorpIntroduction from '@/components/home/CorpIntroduction.vue'
 import NewbieGuide from '@/components/home/NewbieGuide.vue'
 import Canteen from '@/components/home/Canteen.vue'
-
+import CustomModal from '@/components/common/CustomModal.vue';
 // 页面引用
-const loadingPageRef = ref(null)
+const loadingPageRef = ref(null);
+const modalVisible = ref(false);
+const fileData = ref({
+  fileType: '',
+  name: '',
+  filePath: ''
+})
 
 // 军团数据
 const corpInfo = ref({
@@ -53,6 +59,129 @@ watch(corpMembers, (newMembers) => {
 // 本地存储键名
 const CORP_MEMBERS_STORAGE_KEY = 'eve_corp_members_data'
 const CORP_MEMBERS_TIMESTAMP_KEY = 'eve_corp_members_timestamp'
+const CHARACTER_IMAGE_CACHE_PREFIX = 'eve_character_image_'
+
+// 图片缓存相关函数
+// 下载图片并转换为base64存储
+const downloadAndCacheImage = async (imageUrl, characterId) => {
+  try {
+    // 检查网络连接
+    if (!navigator.onLine) {
+      console.warn(`角色 ${characterId} 头像下载跳过：网络离线`)
+      return null
+    }
+    
+    const response = await fetch(imageUrl, {
+      timeout: 10000, // 10秒超时
+      headers: {
+        'Accept': 'image/*'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const blob = await response.blob()
+    
+    // 检查文件大小（限制为5MB）
+    if (blob.size > 5 * 1024 * 1024) {
+      console.warn(`角色 ${characterId} 头像过大 (${blob.size} bytes)，跳过缓存`)
+      return null
+    }
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const base64Data = reader.result
+          setCachedImage(characterId, base64Data)
+          resolve(base64Data)
+        } catch (error) {
+          console.error(`角色 ${characterId} base64转换失败:`, error)
+          resolve(null)
+        }
+      }
+      reader.onerror = (error) => {
+        console.error(`角色 ${characterId} 文件读取失败:`, error)
+        resolve(null) // 返回null而不是reject，避免中断流程
+      }
+      reader.readAsDataURL(blob)
+    })
+  } catch (error) {
+    console.error(`下载角色 ${characterId} 头像失败:`, error)
+    return null
+  }
+}
+
+// 从本地存储获取缓存图片
+const getCachedImage = (characterId) => {
+  try {
+    const cacheKey = CHARACTER_IMAGE_CACHE_PREFIX + characterId
+    return localStorage.getItem(cacheKey)
+  } catch (error) {
+    console.error(`获取角色 ${characterId} 缓存图片失败:`, error)
+    return null
+  }
+}
+
+// 清理旧的图片缓存
+const clearOldImageCache = () => {
+  try {
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(CHARACTER_IMAGE_CACHE_PREFIX)) {
+        keysToRemove.push(key)
+      }
+    }
+    
+    // 清理一半的缓存
+    const halfLength = Math.floor(keysToRemove.length / 2)
+    for (let i = 0; i < halfLength; i++) {
+      localStorage.removeItem(keysToRemove[i])
+    }
+    
+    console.log(`已清理 ${halfLength} 个图片缓存`)
+  } catch (error) {
+    console.error('清理图片缓存失败:', error)
+  }
+}
+
+// 保存图片到本地存储
+const setCachedImage = (characterId, base64Data) => {
+  try {
+    const cacheKey = CHARACTER_IMAGE_CACHE_PREFIX + characterId
+    
+    // 检查localStorage可用性和空间
+    if (typeof Storage === 'undefined') {
+      console.warn('浏览器不支持localStorage，跳过图片缓存')
+      return false
+    }
+    
+    // 检查存储空间（简单检测）
+    try {
+      const testKey = 'storage_test_' + Date.now()
+      localStorage.setItem(testKey, 'test')
+      localStorage.removeItem(testKey)
+    } catch (e) {
+      console.warn('localStorage空间不足，清理旧缓存')
+      // 清理部分旧的图片缓存
+      clearOldImageCache()
+    }
+    
+    localStorage.setItem(cacheKey, base64Data)
+    console.log(`角色 ${characterId} 头像已缓存`)
+    return true
+  } catch (error) {
+    console.error(`保存角色 ${characterId} 头像缓存失败:`, error)
+    if (error.name === 'QuotaExceededError') {
+      console.warn('localStorage存储配额已满，尝试清理缓存')
+      clearOldImageCache()
+    }
+    return false
+  }
+}
 
 // 从本地存储加载军团成员数据
 const loadMembersFromStorage = () => {
@@ -188,11 +317,30 @@ const fetchCorporationMembers = async (corpId) => {
         continue
       }
 
+      // 检查是否有缓存图片
+      const cachedImage = getCachedImage(character.character_id)
+      const originalImageUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://images.evetech.net/characters/${character.character_id}/portrait?size=256`)}`
+      
       const memberData = {
-        image: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://images.evetech.net/characters/${character.character_id}/portrait?size=256`)}`,
+        image: cachedImage || originalImageUrl, // 优先使用缓存图片
         text: characterName,
         characterId: character.character_id,
         fallbackImage: 'https://picsum.photos/256/256?grayscale' // 备用图片
+      }
+      
+      // 如果没有缓存，异步下载并缓存图片
+      if (!cachedImage) {
+        downloadAndCacheImage(originalImageUrl, character.character_id).then(base64Data => {
+          if (base64Data) {
+            // 更新已存在的成员数据中的图片URL
+            const existingMember = corpMembers.value.find(member => member.characterId === character.character_id)
+            if (existingMember) {
+              existingMember.image = base64Data
+            }
+          }
+        }).catch(error => {
+          console.error(`异步缓存角色 ${character.character_id} 头像失败:`, error)
+        })
       }
 
       members.push(memberData)
@@ -225,17 +373,26 @@ const fetchCorporationMembers = async (corpId) => {
   }
 }
 
+const handleNewbieItemClick = (item) => {
+  // 使用新的fileData结构
+  fileData.value = item;
+  modalVisible.value = true
+  console.log(fileData.value)
+}
 
 
-
-// 移除新人指引相关状态，已迁移到 NewbieGuide.vue
-
-const historyInfo = ref({
-  title: '光点编年史：',
-  subtitle: '催更找院长',
-  link: 'https://www.kdocs.cn/l/cqnSw64bxGPh'
-})
-
+const historyInfoList = ref([
+  {
+    name: '光点编年史 -第一章',
+    fileType: 'word',
+    filePath: '/light-spot-home/docs/光点编年史-第一章.docx'
+  },
+  {
+    name: '光点编年史 -第二章',
+    fileType: 'word',
+    filePath: '/light-spot-home/docs/光点编年史-第二章.docx'
+  }
+]);
 // 窗口宽度响应式状态
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
 
@@ -354,12 +511,12 @@ onUnmounted(() => {
           <Card class="info-card tech-card">
             <template #title>
               <div class="card-title-container">
-                <h3 class="card-title-text">{{ historyInfo.title + historyInfo.subtitle }}</h3>
+                <h3 class="card-title-text">{{ '光点编年史（催更找院长）' }}</h3>
               </div>
             </template>
-            <div class="history-section">
-              <a :href="historyInfo.link" target="_blank" class="history-link">
-                查看编年史文档
+            <div class="history-section" v-for="item in historyInfoList" :key="item.name">
+              <a @click="handleNewbieItemClick(item)" target="_blank" class="history-link">
+                {{item.name}}
               </a>
             </div>
           </Card>
@@ -377,6 +534,13 @@ onUnmounted(() => {
         </div> <!-- content-rows 结束 -->
       </div> <!-- 主要页面内容结束 -->
     </Transition>
+
+    <!-- 弹框 -->
+    <CustomModal
+      :visible="modalVisible"
+      :fileData="fileData"
+      @close="modalVisible = false"
+    />
 
     <!-- 弹框逻辑已迁移到各个子组件中 -->
   </div>

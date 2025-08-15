@@ -44,6 +44,7 @@
   </Card>
 
   <CustomModal
+    :imageWidth="500"
     :visible="showJoinUsModal"
     :fileData="fileData"
     @close="showJoinUsModal = false"

@@ -43,10 +43,7 @@
             <p class="loading-title">正在加载文件...</p>
             <p class="loading-subtitle">{{ currentTitle || '请稍候' }}</p>
           </div>
-          <!-- 加载进度条效果 -->
-          <div class="loading-progress">
-            <div class="loading-progress-bar"></div>
-          </div>
+
         </div>
 
         <!-- 统一错误显示 -->
@@ -70,7 +67,7 @@
         <!-- 新的文件内容显示（基于fileData） -->
         <template v-else-if="props.fileData?.fileType && shouldShowContent">
           <!-- 图片内容 -->
-          <div v-if="currentFileType === 'image'" class="modal-image-container">
+          <div v-if="currentFileType === 'image'" class="modal-image-container" :style="imageContainerStyle">
             <img
               :src="fileContent"
               :alt="displayTitle"
@@ -91,7 +88,7 @@
         <!-- 兼容旧版本的内容显示 -->
         <template v-else>
           <!-- 图片内容 -->
-          <div v-if="imageUrl" class="modal-image-container">
+          <div v-if="imageUrl" class="modal-image-container" :style="imageContainerStyle">
             <img
               :src="imageUrl"
               :alt="imageAlt || 'Modal Image'"
@@ -147,6 +144,18 @@ const props = defineProps({
   height: {
     type: [String, Number],
     default: 'auto'
+  },
+  imageWidth: {
+    type: [String, Number],
+    default: 'auto'
+  },
+  imageHeight: {
+    type: [String, Number],
+    default: 'auto'
+  },
+  wordWidth: {
+    type: [String, Number],
+    default: 794
   },
   maskClosable: {
     type: Boolean,
@@ -277,6 +286,22 @@ const shouldShowError = computed(() => {
   return wordError.value
 })
 
+const imageContainerStyle = computed(() => {
+  const style = {}
+  
+  // 如果外部传入了imageWidth，使用外部的值，否则使用auto
+  if (props.imageWidth && props.imageWidth !== 'auto') {
+    style.width = typeof props.imageWidth === 'number' ? `${props.imageWidth}px` : props.imageWidth
+  }
+  
+  // 如果外部传入了imageHeight，使用外部的值，否则使用auto
+  if (props.imageHeight && props.imageHeight !== 'auto') {
+    style.height = typeof props.imageHeight === 'number' ? `${props.imageHeight}px` : props.imageHeight
+  }
+  
+  return style
+})
+
 const modalStyle = computed(() => {
   const style = {
     transform: `translate(calc(-50% + ${modalPosition.value.x}px), calc(-50% + ${modalPosition.value.y}px))`
@@ -284,14 +309,40 @@ const modalStyle = computed(() => {
 
   // Markdown内容或Word文档特殊尺寸设置
   if (props.fileData?.fileType === 'markdown' || props.fileData?.fileType === 'word' || props.markdownContent || props.wordUrl || props.wordContent) {
-    // A4纸张宽度约794px
-    style.width = '794px'
+    // Word文档宽度：使用wordWidth参数或默认794px（A4纸张宽度）
+    const wordWidthValue = typeof props.wordWidth === 'number' ? `${props.wordWidth}px` : props.wordWidth
+    style.width = wordWidthValue
     // 高度为视口高度减去上下各20px边距
     style.height = `${window.innerHeight - 40}px`
     // 确保弹窗不超出视口边界
     style.maxHeight = `${window.innerHeight - 40}px`
+  } else if (props.fileData?.fileType === 'image' || props.imageUrl) {
+    // 图片内容的尺寸控制 - 设置固定尺寸防止超出
+    const maxWidth = window.innerWidth * 0.9
+    const maxHeight = window.innerHeight * 0.9
+    
+    // 设置固定宽高而不是最大宽高，防止内容撑大弹窗
+    if (props.width && props.height) {
+      const customWidth = typeof props.width === 'number' ? props.width : parseInt(props.width)
+      const customHeight = typeof props.height === 'number' ? props.height : parseInt(props.height)
+      style.width = `${Math.min(customWidth, maxWidth)}px`
+      style.height = `${Math.min(customHeight, maxHeight)}px`
+    } else {
+      // 默认图片弹窗尺寸
+      style.width = `${Math.min(800, maxWidth)}px`
+      style.height = `${Math.min(600, maxHeight)}px`
+    }
+    
+    // 添加overflow控制，确保内容不会溢出
+    style.overflow = 'hidden'
   } else {
-    // 自定义宽高（非markdown/word内容）
+    // 其他内容的自定义宽高
+    const maxWidth = window.innerWidth * 0.9
+    const maxHeight = window.innerHeight * 0.9
+    
+    style.maxWidth = `${maxWidth}px`
+    style.maxHeight = `${maxHeight}px`
+    
     if (props.width) {
       style.width = typeof props.width === 'number' ? `${props.width}px` : props.width
     }
@@ -367,39 +418,8 @@ const handleMouseUp = () => {
 const handleImageLoad = (e) => {
   imageLoaded.value = true
   imageError.value = false
-  // 图片加载完成后，根据图片尺寸调整弹窗大小
+  // 图片加载完成后更新弹窗尺寸
   nextTick(() => {
-    const img = e.target
-    const container = modalRef.value
-    if (img && container && !props.width && !props.height) {
-      // 获取图片的自然尺寸
-      const imgWidth = img.naturalWidth
-      const imgHeight = img.naturalHeight
-
-      // 计算适合视口的尺寸
-      const maxWidth = window.innerWidth * 0.8
-      const maxHeight = window.innerHeight * 0.8
-
-      let newWidth = imgWidth
-      let newHeight = imgHeight
-
-      // 按比例缩放以适应视口
-      if (newWidth > maxWidth) {
-        const ratio = maxWidth / newWidth
-        newWidth = maxWidth
-        newHeight = newHeight * ratio
-      }
-
-      if (newHeight > maxHeight) {
-        const ratio = maxHeight / newHeight
-        newHeight = maxHeight
-        newWidth = newWidth * ratio
-      }
-
-      // 设置弹窗尺寸（加上padding）
-      container.style.width = `${newWidth + 40}px`
-      container.style.height = `${newHeight + 40}px`
-    }
     updateModalSize()
   })
 }
@@ -630,6 +650,9 @@ onUnmounted(() => {
   max-width: 90vw;
   max-height: 90vh;
   user-select: none;
+  /* 确保所有内容都不会超出弹窗边界 */
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* 加载动画样式 */
@@ -967,13 +990,15 @@ onUnmounted(() => {
 }
 
 .modal-image-container img {
-  max-width: calc(100% - 32px);
-  max-height: calc(100% - 32px);
-  width: auto;
-  height: auto;
+  /* 根据传入的imageWidth/imageHeight参数设置尺寸，未传入时自适应 */
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: block;
+  /* 确保图片绝对不会超出容器 */
+  box-sizing: border-box;
 }
 
 /* Markdown内容 */
@@ -1031,13 +1056,21 @@ onUnmounted(() => {
 
 /* Word文档样式 */
 .modal-word {
-  padding: 20px;
+  padding: 16px;
   color: #e2e8f0;
   line-height: 1.6;
-  width: 794px; /* A4纸张宽度 */
+  width: 100%; /* 响应父容器的动态宽度设置 */
   max-height: calc(100vh - 40px); /* 视口高度减去上下边距 */
-  overflow: hidden; /* 禁用Word内容的滚动条 */
+  overflow-y: auto; /* 允许垂直滚动 */
+  overflow-x: hidden; /* 禁用水平滚动 */
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
   box-sizing: border-box;
+  /* 隐藏滚动条但保持滚动功能 */
+  -webkit-scrollbar: none; /* Webkit浏览器 */
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 .word-loading {
@@ -1103,7 +1136,7 @@ onUnmounted(() => {
 
 /* Word文档内容样式优化 */
 .word-content {
-  overflow: hidden; /* 禁用Word内容区域的滚动 */
+  /* 移除overflow限制，允许内容正常显示 */
 }
 
 .word-content h1,

@@ -22,6 +22,8 @@
 
   <!-- 弹框 -->
   <CustomModal
+    :imageWidth="currentImageWidth"
+    :imageHeight="currentImageHeight"
     :visible="modalVisible"
     :fileData="fileData"
     @close="modalVisible = false"
@@ -65,12 +67,16 @@ const newbieInfo = ref([
   {
     name: '光点舰船树形图',
     fileType: 'image',
-    filePath: shipTreeImage
+    filePath: shipTreeImage,
+    width:2000,
+    height:1000
   }
 ]);
 
 const modalVisible = ref(false)
 const fileData = ref(null)
+const currentImageWidth = ref(600)
+const currentImageHeight = ref('auto')
 
 const handleNewbieItemClick = (item) => {
   // 使用新的fileData结构
@@ -79,6 +85,19 @@ const handleNewbieItemClick = (item) => {
     name: item.name,
     filePath: item.filePath
   }
-  
+
+  // 如果item有width和height属性，则使用item的尺寸，否则使用默认值
+  if (item.width) {
+    currentImageWidth.value = item.width
+  } else {
+    currentImageWidth.value = 600
+  }
+
+  if (item.height) {
+    currentImageHeight.value = item.height
+  } else {
+    currentImageHeight.value = 'auto'
+  }
+
   modalVisible.value = true
 }// closeModal方法已不再需要，因为CustomModal组件会直接处理关闭事件</script>
